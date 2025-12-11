@@ -198,35 +198,68 @@ export const SettingsView: React.FC<Props> = ({
       const file = e.target.files?.[0];
       if (!file) return;
 
+      const isCsv = file.name.toLowerCase().endsWith('.csv');
       const reader = new FileReader();
+
       reader.onload = (evt) => {
           try {
-              const bstr = evt.target?.result;
-              const wb = XLSX.read(bstr, { type: 'binary' });
+              const arrayBuffer = evt.target?.result as ArrayBuffer;
+              let wb;
+
+              if (isCsv) {
+                   // SMART ENCODING DETECTION
+                   // 1. Try UTF-8 first
+                   let text;
+                   try {
+                       const decoder = new TextDecoder('utf-8', { fatal: true });
+                       text = decoder.decode(arrayBuffer);
+                   } catch (e) {
+                       // 2. Fallback to GB18030 (Chinese) if UTF-8 fails
+                       const decoder = new TextDecoder('gb18030');
+                       text = decoder.decode(arrayBuffer);
+                   }
+                   wb = XLSX.read(text, { type: 'string' });
+              } else {
+                   // For Excel (.xlsx), we read as ArrayBuffer which handles Unicode natively
+                   wb = XLSX.read(arrayBuffer, { type: 'array' });
+              }
+              
               const wsname = wb.SheetNames[0];
               const ws = wb.Sheets[wsname];
               const data = XLSX.utils.sheet_to_json(ws);
 
               const parsedTransactions: Omit<Transaction, 'id'>[] = [];
               data.forEach((row: any) => {
-                  const date = row['Date'] || row['date'];
-                  const amount = row['Amount'] || row['amount'];
-                  const category = row['Category'] || row['category'];
-                  const description = row['Description'] || row['description'] || 'Imported Transaction';
-                  const type = (row['Type'] || row['type'] || 'ACTUAL').toUpperCase();
-
+                  // Support both English and Chinese headers
+                  const date = row['Date'] || row['date'] || row['日期'];
+                  const amount = row['Amount'] || row['amount'] || row['金额'] || row['费用'];
+                  const category = row['Category'] || row['category'] || row['类别'] || row['科目'];
+                  const description = row['Description'] || row['description'] || row['描述'] || row['备注'] || row['说明'] || 'Imported Transaction';
+                  
+                  const rawType = row['Type'] || row['type'] || row['类型'] || 'ACTUAL';
+                  
                   if (date && amount && category) {
-                      let dateStr = date;
+                      // Determine transaction type (handle Chinese "预算" etc.)
+                      let type = TransactionType.ACTUAL;
+                      const typeStr = String(rawType).toUpperCase();
+                      if (typeStr.includes('PLAN') || typeStr.includes('BUDGET') || typeStr.includes('预算')) {
+                          type = TransactionType.PLANNED;
+                      }
+
+                      // Format Date
+                      let dateStr = String(date);
                       if (typeof date === 'number') {
-                          const jsDate = new Date(Math.round((date - 25569)*86400*1000));
+                          // Excel serial date to JS Date
+                          const jsDate = new Date(Math.round((date - 25569) * 86400 * 1000));
                           dateStr = jsDate.toISOString().split('T')[0];
                       }
+
                       parsedTransactions.push({
                           date: dateStr,
                           amount: Number(amount),
-                          category: String(category),
+                          category: String(category).trim(), // Trim whitespace to avoid mismatch
                           description: String(description),
-                          type: type === 'PLANNED' || type === 'BUDGET' ? TransactionType.PLANNED : TransactionType.ACTUAL,
+                          type: type,
                           createdBy: currentUser.name + ' (Import)'
                       });
                   }
@@ -237,7 +270,7 @@ export const SettingsView: React.FC<Props> = ({
                   setImportStatus(`Successfully imported ${parsedTransactions.length} items.`);
                   setTimeout(() => setImportStatus(''), 3000);
               } else {
-                  setImportStatus('No valid transactions found in file.');
+                  setImportStatus('No valid transactions found in file. Please check column headers (Date, Amount, Category).');
               }
           } catch (err) {
               console.error(err);
@@ -245,7 +278,9 @@ export const SettingsView: React.FC<Props> = ({
           }
           if (fileInputRef.current) fileInputRef.current.value = '';
       };
-      reader.readAsBinaryString(file);
+      
+      // Always read as ArrayBuffer to control decoding manually
+      reader.readAsArrayBuffer(file);
   };
 
   return (
@@ -674,3 +709,4 @@ export const SettingsView: React.FC<Props> = ({
     </div>
   );
 };
+    

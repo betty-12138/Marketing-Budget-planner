@@ -127,6 +127,17 @@ const App: React.FC = () => {
           ...item,
           id: Math.random().toString(36).substr(2, 9)
       }));
+      // Extract unique categories from import and add them
+      const newCats = new Set<string>();
+      imported.forEach(t => {
+          if (!categories.includes(t.category)) {
+              newCats.add(t.category);
+          }
+      });
+      if (newCats.size > 0) {
+          setCategories(prev => [...prev, ...Array.from(newCats)]);
+      }
+
       setTransactions(prev => [...prev, ...newTransactions]);
   };
 
@@ -180,7 +191,8 @@ const App: React.FC = () => {
         })
       ].join('\n');
       
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      // Add Byte Order Mark (\uFEFF) to ensure Excel opens the CSV as UTF-8 (handling Chinese characters correctly)
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
