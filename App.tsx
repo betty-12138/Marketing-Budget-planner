@@ -1,16 +1,17 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { YearlyDashboard } from './components/YearlyDashboard';
 import { MonthlyView } from './components/MonthlyView';
+import { QuarterlyView } from './components/QuarterlyView'; // New Component
 import { ExpenseForm } from './components/ExpenseForm';
 import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
 import { Transaction, TransactionType, DEFAULT_CATEGORIES, User } from './types';
-import { LayoutDashboard, PlusCircle, PieChart, Menu, X, Wallet, Settings, Download, LogOut, Calendar } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, PieChart, Menu, X, Wallet, Settings, Download, LogOut, Calendar, BarChart3 } from 'lucide-react';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-// Mock Initial Data 
+// Mock Initial Data (Only used if localStorage is empty)
 const INITIAL_DATA: Transaction[] = [
   { id: '1', date: `${CURRENT_YEAR}-01-01`, category: 'Advertising (Ads)', description: 'Jan Ads Budget', amount: 5000, type: TransactionType.PLANNED, createdBy: 'Administrator' },
   { id: '2', date: `${CURRENT_YEAR}-01-01`, category: 'Tools & Software', description: 'Q1 Software License', amount: 1200, type: TransactionType.PLANNED, createdBy: 'Administrator' },
@@ -19,8 +20,30 @@ const INITIAL_DATA: Transaction[] = [
   { id: '5', date: `${CURRENT_YEAR}-01-20`, category: 'Tools & Software', description: 'HubSpot Monthly', amount: 800, type: TransactionType.ACTUAL, createdBy: 'John Doe' },
 ];
 
+const INITIAL_USERS: User[] = [
+    { 
+        id: 'admin-001', 
+        name: 'Administrator', 
+        username: 'admin',
+        password: 'admin123',
+        email: 'admin@marketflow.com', 
+        role: 'ADMIN', 
+        permissions: { canEditBudget: true, canEditCategory: true, canManageTransactions: true, canManageUsers: true } 
+    },
+    { 
+      id: 'user-001', 
+      name: 'John Doe', 
+      username: 'john',
+      password: 'password123',
+      email: 'john@marketflow.com', 
+      role: 'MEMBER', 
+      permissions: { canEditBudget: false, canEditCategory: false, canManageTransactions: true, canManageUsers: false } 
+  },
+];
+
 enum View {
   YEARLY = 'YEARLY',
+  QUARTERLY = 'QUARTERLY',
   MONTHLY = 'MONTHLY',
   ENTRY = 'ENTRY',
   SETTINGS = 'SETTINGS'
@@ -29,31 +52,28 @@ enum View {
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  // Mock Database of Users
-  const [users, setUsers] = useState<User[]>([
-      { 
-          id: 'admin-001', 
-          name: 'Administrator', 
-          username: 'admin',
-          password: 'admin123',
-          email: 'admin@marketflow.com', 
-          role: 'ADMIN', 
-          permissions: { canEditBudget: true, canEditCategory: true, canManageTransactions: true, canManageUsers: true } 
-      },
-      // Example Member
-      { 
-        id: 'user-001', 
-        name: 'John Doe', 
-        username: 'john',
-        password: 'password123',
-        email: 'john@marketflow.com', 
-        role: 'MEMBER', 
-        permissions: { canEditBudget: false, canEditCategory: false, canManageTransactions: true, canManageUsers: false } 
-    },
-  ]);
+  // -- PERSISTENCE: Initialize State from LocalStorage --
+  const [users, setUsers] = useState<User[]>(() => {
+      const saved = localStorage.getItem('mf_users');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+  });
 
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_DATA);
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+      const saved = localStorage.getItem('mf_transactions');
+      return saved ? JSON.parse(saved) : INITIAL_DATA;
+  });
+
+  const [categories, setCategories] = useState<string[]>(() => {
+      const saved = localStorage.getItem('mf_categories');
+      return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+  });
+
+  // -- PERSISTENCE: Save to LocalStorage on Change --
+  useEffect(() => { localStorage.setItem('mf_users', JSON.stringify(users)); }, [users]);
+  useEffect(() => { localStorage.setItem('mf_transactions', JSON.stringify(transactions)); }, [transactions]);
+  useEffect(() => { localStorage.setItem('mf_categories', JSON.stringify(categories)); }, [categories]);
+
+
   const [currentView, setCurrentView] = useState<View>(View.MONTHLY);
   const [selectedDate, setSelectedDate] = useState(new Date()); 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -73,14 +93,18 @@ const App: React.FC = () => {
       setUsers(prev => [...prev, user]);
   };
 
+  const handleDeleteUser = (userId: string) => {
+      setUsers(prev => prev.filter(u => u.id !== userId));
+  };
+
   const updateUserPermissions = (userId: string, permissions: User['permissions']) => {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions } : u));
-      // Update current user if it's them
       if (currentUser?.id === userId) {
           setCurrentUser(prev => prev ? { ...prev, permissions } : null);
       }
   };
 
+  // Transaction Management
   const addTransaction = (t: Omit<Transaction, 'id'> | Omit<Transaction, 'id'>[]) => {
     const newItems = Array.isArray(t) ? t : [t];
     const newTransactions = newItems.map(item => ({
@@ -118,6 +142,7 @@ const App: React.FC = () => {
       setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
   };
 
+  // Category Management
   const handleAddCategory = (cat: string) => {
       setCategories(prev => [...prev, cat]);
   };
@@ -129,6 +154,10 @@ const App: React.FC = () => {
 
   const handleRemoveCategory = (cat: string) => {
       setCategories(prev => prev.filter(c => c !== cat));
+  };
+
+  const handleSortCategories = (order: 'asc' | 'desc') => {
+      setCategories(prev => [...prev].sort((a, b) => order === 'asc' ? a.localeCompare(b) : b.localeCompare(a)));
   };
 
   const updateYear = (year: number) => {
@@ -167,6 +196,7 @@ const App: React.FC = () => {
 
   const navItems = [
     { id: View.MONTHLY, label: 'Monthly Board', icon: LayoutDashboard },
+    { id: View.QUARTERLY, label: 'Quarterly Board', icon: BarChart3 },
     { id: View.YEARLY, label: 'Yearly Plan', icon: PieChart },
     { id: View.ENTRY, label: 'Add Expense', icon: PlusCircle },
     { id: View.SETTINGS, label: 'Settings', icon: Settings },
@@ -246,11 +276,13 @@ const App: React.FC = () => {
             <div>
                 <h1 className="text-3xl font-bold text-slate-900">
                     {currentView === View.MONTHLY ? 'Monthly Overview' : 
+                     currentView === View.QUARTERLY ? 'Quarterly Dashboard' :
                      currentView === View.YEARLY ? 'Yearly Planner' : 
                      currentView === View.SETTINGS ? 'Settings & Transactions' : 'New Transaction'}
                 </h1>
                 <p className="text-slate-500 mt-1">
                     {currentView === View.MONTHLY ? 'Track your actual spend against planned budget.' : 
+                     currentView === View.QUARTERLY ? 'Analyze performance by quarter (Q1-Q4).' :
                      currentView === View.YEARLY ? 'High-level view of annual financial performance.' : 
                      currentView === View.SETTINGS ? 'Manage categories, users, and transactions.' : 'Record a new expense or budget item.'}
                 </p>
@@ -266,7 +298,7 @@ const App: React.FC = () => {
                     <span className="hidden sm:inline">Export Data</span>
                 </button>
 
-                {(currentView === View.MONTHLY || currentView === View.YEARLY) && (
+                {(currentView === View.MONTHLY || currentView === View.YEARLY || currentView === View.QUARTERLY) && (
                    <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-3 py-1.5 flex items-center gap-2">
                       <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Year</span>
                       <select 
@@ -316,6 +348,13 @@ const App: React.FC = () => {
                 />
             )}
             
+            {currentView === View.QUARTERLY && (
+                <QuarterlyView 
+                    transactions={transactions} 
+                    currentYear={selectedDate.getFullYear()} 
+                />
+            )}
+
             {currentView === View.YEARLY && (
                 <YearlyDashboard 
                     transactions={transactions} 
@@ -338,12 +377,14 @@ const App: React.FC = () => {
                     currentUser={currentUser}
                     users={users}
                     onAddUser={handleAddUser}
+                    onDeleteUser={handleDeleteUser}
                     onUpdateUserPermissions={updateUserPermissions}
                     categories={categories}
                     transactions={transactions}
                     onAddCategory={handleAddCategory}
                     onRenameCategory={handleRenameCategory}
                     onRemoveCategory={handleRemoveCategory}
+                    onSortCategories={handleSortCategories}
                     onUpdateTransaction={updateTransaction}
                     onDeleteTransaction={deleteTransaction}
                     onBulkDelete={bulkDeleteTransactions}

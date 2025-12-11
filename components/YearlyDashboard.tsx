@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { Transaction, TransactionType } from '../types';
 import { Card } from './ui/Card';
 
@@ -102,11 +102,15 @@ export const YearlyDashboard: React.FC<Props> = ({ transactions, currentYear }) 
                 formatter={(value: number) => [`¥${value.toLocaleString()}`, '']}
               />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              <Bar dataKey="planned" name="Planned Budget" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={20} />
+              <Bar dataKey="planned" name="Planned Budget" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={20}>
+                  {/* Show values on top of bars */}
+                  <LabelList dataKey="planned" position="top" formatter={(val: number) => val > 0 ? `¥${(val/1000).toFixed(0)}k` : ''} style={{ fontSize: '10px', fill: '#64748b' }} />
+              </Bar>
               <Bar dataKey="actual" name="Actual Spend" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={20}>
                 {chartData.map((entry, index) => (
                    <Cell key={`cell-${index}`} fill={entry.actual > entry.planned ? '#f43f5e' : '#4f46e5'} />
                 ))}
+                 <LabelList dataKey="actual" position="top" formatter={(val: number) => val > 0 ? `¥${(val/1000).toFixed(0)}k` : ''} style={{ fontSize: '10px', fill: '#4f46e5', fontWeight: 'bold' }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>

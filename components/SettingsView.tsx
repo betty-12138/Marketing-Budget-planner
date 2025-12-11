@@ -1,7 +1,7 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Card } from './ui/Card';
-import { Plus, Trash2, Tag, AlertCircle, FileText, Search, Edit2, Users, Shield, CheckCircle, Upload, Save, X, UserPlus, Lock } from 'lucide-react';
+import { Plus, Trash2, Tag, AlertCircle, FileText, Search, Edit2, Users, Shield, CheckCircle, Upload, Save, X, UserPlus, Lock, ArrowUpDown, Filter } from 'lucide-react';
 import { Transaction, TransactionType, User, UserRole, Permissions } from '../types';
 import { ExpenseForm } from './ExpenseForm';
 
@@ -11,12 +11,14 @@ interface Props {
   currentUser: User;
   users: User[];
   onAddUser: (user: User) => void;
+  onDeleteUser: (userId: string) => void;
   onUpdateUserPermissions: (userId: string, permissions: User['permissions']) => void;
   categories: string[];
   transactions: Transaction[];
   onAddCategory: (cat: string) => void;
   onRenameCategory: (oldName: string, newName: string) => void;
   onRemoveCategory: (cat: string) => void;
+  onSortCategories: (order: 'asc' | 'desc') => void;
   onUpdateTransaction: (t: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
   onBulkDelete: (ids: string[]) => void;
@@ -29,12 +31,14 @@ export const SettingsView: React.FC<Props> = ({
     currentUser,
     users,
     onAddUser,
+    onDeleteUser,
     onUpdateUserPermissions,
     categories, 
     transactions, 
     onAddCategory, 
     onRenameCategory,
     onRemoveCategory, 
+    onSortCategories,
     onUpdateTransaction,
     onDeleteTransaction,
     onBulkDelete,
@@ -52,6 +56,12 @@ export const SettingsView: React.FC<Props> = ({
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<string>('');
+
+  // Transaction Sorting & Filtering State
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Transaction, direction: 'asc' | 'desc' } | null>({ key: 'date', direction: 'desc' });
+  const [filterCategory, setFilterCategory] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('');
+  const [dateRange, setDateRange] = useState<{start: string, end: string}>({ start: '', end: '' });
 
   // User Mgmt State
   const [showAddUser, setShowAddUser] = useState(false);
@@ -73,6 +83,7 @@ export const SettingsView: React.FC<Props> = ({
   const canManageTransactions = currentUser.role === 'ADMIN' || currentUser.permissions.canManageTransactions;
   const canManageUsers = currentUser.role === 'ADMIN';
 
+  // --- Handlers ---
   const handleAddCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
@@ -86,19 +97,6 @@ export const SettingsView: React.FC<Props> = ({
           onRenameCategory(renameData.oldName, renameData.newName.trim());
           setRenameData(null);
       }
-  };
-
-  const filteredTransactions = transactions.filter(t => 
-    t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t.createdBy.toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()); 
-
-  const togglePermission = (user: User, key: keyof User['permissions']) => {
-      onUpdateUserPermissions(user.id, {
-          ...user.permissions,
-          [key]: !user.permissions[key]
-      });
   };
 
   const handleCreateUser = (e: React.FormEvent) => {
@@ -120,7 +118,7 @@ export const SettingsView: React.FC<Props> = ({
           name: newUser.name,
           username: newUser.username,
           password: newUser.password,
-          email: `${newUser.username}@local.com`, // Dummy email
+          email: `${newUser.username}@local.com`, 
           role: newUser.role,
           permissions: finalPermissions
       };
@@ -129,6 +127,50 @@ export const SettingsView: React.FC<Props> = ({
       setShowAddUser(false);
       setNewUser({ name: '', username: '', password: '', role: 'MEMBER' });
   };
+
+  const handleDeleteUserWrapper = (userId: string) => {
+      if (userId === currentUser.id) {
+          alert("You cannot delete yourself.");
+          return;
+      }
+      if (window.confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
+          onDeleteUser(userId);
+      }
+  };
+
+  // --- Transaction Logic ---
+  const handleSort = (key: keyof Transaction) => {
+      let direction: 'asc' | 'desc' = 'asc';
+      if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+          direction = 'desc';
+      }
+      setSortConfig({ key, direction });
+  };
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+        // Search
+        const matchesSearch = 
+            t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            t.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.createdBy.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        // Filters
+        const matchesCategory = filterCategory ? t.category === filterCategory : true;
+        const matchesType = filterType ? t.type === filterType : true;
+        const matchesStart = dateRange.start ? t.date >= dateRange.start : true;
+        const matchesEnd = dateRange.end ? t.date <= dateRange.end : true;
+
+        return matchesSearch && matchesCategory && matchesType && matchesStart && matchesEnd;
+    }).sort((a, b) => {
+        if (!sortConfig) return 0;
+        const { key, direction } = sortConfig;
+        
+        if (a[key] < b[key]) return direction === 'asc' ? -1 : 1;
+        if (a[key] > b[key]) return direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+  }, [transactions, searchTerm, filterCategory, filterType, dateRange, sortConfig]);
 
   const toggleSelection = (id: string) => {
       const newSet = new Set(selectedTransactionIds);
@@ -253,7 +295,6 @@ export const SettingsView: React.FC<Props> = ({
                             <option value="ADMIN">Admin (Full Access)</option>
                         </select>
                     </div>
-
                     {newUser.role === 'MEMBER' && (
                         <div className="bg-slate-50 p-3 rounded border border-slate-200">
                             <p className="text-xs font-bold text-slate-500 mb-2">Permissions</p>
@@ -273,7 +314,6 @@ export const SettingsView: React.FC<Props> = ({
                             </div>
                         </div>
                     )}
-
                     <div className="flex gap-2 pt-2">
                         <button type="button" onClick={() => setShowAddUser(false)} className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded">Cancel</button>
                         <button type="submit" className="flex-1 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">Create User</button>
@@ -330,9 +370,8 @@ export const SettingsView: React.FC<Props> = ({
                                 <th className="px-4 py-3">User</th>
                                 <th className="px-4 py-3">Username</th>
                                 <th className="px-4 py-3">Role</th>
-                                <th className="px-4 py-3 text-center">Edit Budget</th>
-                                <th className="px-4 py-3 text-center">Edit Categories</th>
-                                <th className="px-4 py-3 text-center">Manage Expenses</th>
+                                <th className="px-4 py-3 text-center">Permissions</th>
+                                <th className="px-4 py-3 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -350,37 +389,27 @@ export const SettingsView: React.FC<Props> = ({
                                         </span>
                                     </td>
                                     {u.role === 'ADMIN' ? (
-                                        <td colSpan={3} className="px-4 py-3 text-center text-xs text-slate-400 italic">
+                                        <td className="px-4 py-3 text-center text-xs text-slate-400 italic">
                                             <div className="flex items-center justify-center gap-1"><Shield size={14}/> Full Access</div>
                                         </td>
                                     ) : (
-                                        <>
-                                            <td className="px-4 py-3 text-center">
-                                                <button 
-                                                    onClick={() => togglePermission(u, 'canEditBudget')}
-                                                    className={`p-1 rounded ${u.permissions.canEditBudget ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:bg-slate-100'}`}
-                                                >
-                                                    <CheckCircle size={20} className={u.permissions.canEditBudget ? 'fill-emerald-100' : ''} />
-                                                </button>
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <button 
-                                                    onClick={() => togglePermission(u, 'canEditCategory')}
-                                                    className={`p-1 rounded ${u.permissions.canEditCategory ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:bg-slate-100'}`}
-                                                >
-                                                    <CheckCircle size={20} className={u.permissions.canEditCategory ? 'fill-emerald-100' : ''} />
-                                                </button>
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                <button 
-                                                    onClick={() => togglePermission(u, 'canManageTransactions')}
-                                                    className={`p-1 rounded ${u.permissions.canManageTransactions ? 'text-emerald-600 bg-emerald-50' : 'text-slate-300 hover:bg-slate-100'}`}
-                                                >
-                                                    <CheckCircle size={20} className={u.permissions.canManageTransactions ? 'fill-emerald-100' : ''} />
-                                                </button>
-                                            </td>
-                                        </>
+                                        <td className="px-4 py-3 text-center text-xs text-slate-500">
+                                            {[
+                                                u.permissions.canEditBudget ? 'Budget' : '',
+                                                u.permissions.canEditCategory ? 'Cats' : '',
+                                                u.permissions.canManageTransactions ? 'Expenses' : ''
+                                            ].filter(Boolean).join(', ') || 'None'}
+                                        </td>
                                     )}
+                                    <td className="px-4 py-3 text-right">
+                                        <button 
+                                            onClick={() => handleDeleteUserWrapper(u.id)}
+                                            className={`p-2 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 ${u.id === currentUser.id ? 'invisible' : ''}`}
+                                            title="Delete User"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -415,7 +444,14 @@ export const SettingsView: React.FC<Props> = ({
                 </form>
             </Card>
 
-            <Card title={`Active Categories (${categories.length})`}>
+            <Card 
+                title={`Active Categories (${categories.length})`}
+                action={
+                    <div className="flex gap-1">
+                        <button onClick={() => onSortCategories('asc')} className="p-1 text-slate-400 hover:text-indigo-600" title="Sort A-Z"><ArrowUpDown size={14} /></button>
+                    </div>
+                }
+            >
                 <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                     {categories.map((cat, idx) => (
                         <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-lg group hover:bg-white hover:border-indigo-100 transition-all">
@@ -462,35 +498,71 @@ export const SettingsView: React.FC<Props> = ({
       {/* Transactions Tab */}
       {activeTab === 'TRANSACTIONS' && (
           <div className="animate-fade-in space-y-4">
-              <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="relative w-full md:w-96">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <input 
-                        type="text" 
-                        placeholder="Search by description, category, or user..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
+              
+              {/* Filters */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                  <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+                     <div className="relative w-full md:w-80">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <input 
+                            type="text" 
+                            placeholder="Search..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                     </div>
+                     <div className="flex items-center gap-3 w-full md:w-auto">
+                        {canManageTransactions && (
+                            <>
+                                <input 
+                                    type="file" 
+                                    ref={fileInputRef} 
+                                    className="hidden" 
+                                    accept=".csv, .xlsx, .xls"
+                                    onChange={handleFileUpload}
+                                />
+                                <button 
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors text-sm font-medium w-full md:w-auto justify-center"
+                                >
+                                    <Upload size={16} /> Import Excel
+                                </button>
+                            </>
+                        )}
+                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                      {canManageTransactions && (
-                          <>
-                              <input 
-                                  type="file" 
-                                  ref={fileInputRef} 
-                                  className="hidden" 
-                                  accept=".csv, .xlsx, .xls"
-                                  onChange={handleFileUpload}
-                              />
-                              <button 
-                                  onClick={() => fileInputRef.current?.click()}
-                                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors text-sm font-medium"
-                              >
-                                  <Upload size={16} /> Import Excel
-                              </button>
-                          </>
-                      )}
+                  
+                  <div className="flex flex-wrap gap-3 items-end border-t border-slate-100 pt-3">
+                      <div className="flex flex-col gap-1 w-full sm:w-auto">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Category</label>
+                          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded text-sm bg-slate-50">
+                              <option value="">All Categories</option>
+                              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                      </div>
+                      <div className="flex flex-col gap-1 w-full sm:w-auto">
+                          <label className="text-xs font-bold text-slate-500 uppercase">Type</label>
+                          <select value={filterType} onChange={e => setFilterType(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded text-sm bg-slate-50">
+                              <option value="">All Types</option>
+                              <option value={TransactionType.PLANNED}>Planned (Budget)</option>
+                              <option value={TransactionType.ACTUAL}>Actual (Expense)</option>
+                          </select>
+                      </div>
+                      <div className="flex flex-col gap-1 w-full sm:w-auto">
+                          <label className="text-xs font-bold text-slate-500 uppercase">From</label>
+                          <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="px-3 py-1.5 border border-slate-200 rounded text-sm bg-slate-50" />
+                      </div>
+                      <div className="flex flex-col gap-1 w-full sm:w-auto">
+                          <label className="text-xs font-bold text-slate-500 uppercase">To</label>
+                          <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="px-3 py-1.5 border border-slate-200 rounded text-sm bg-slate-50" />
+                      </div>
+                      <button 
+                        onClick={() => {setFilterCategory(''); setFilterType(''); setDateRange({start:'', end:''}); setSearchTerm('')}}
+                        className="px-3 py-1.5 text-xs text-rose-500 font-medium hover:bg-rose-50 rounded mb-1"
+                      >
+                          Clear Filters
+                      </button>
                   </div>
               </div>
               
@@ -527,12 +599,20 @@ export const SettingsView: React.FC<Props> = ({
                                         />
                                     </th>
                                   )}
-                                  <th className="px-4 py-3">Date</th>
-                                  <th className="px-4 py-3">User</th>
+                                  <th className="px-4 py-3 cursor-pointer hover:bg-slate-100" onClick={() => handleSort('date')}>
+                                      <div className="flex items-center gap-1">Date <ArrowUpDown size={12}/></div>
+                                  </th>
+                                  <th className="px-4 py-3 cursor-pointer hover:bg-slate-100" onClick={() => handleSort('createdBy')}>
+                                      <div className="flex items-center gap-1">User <ArrowUpDown size={12}/></div>
+                                  </th>
                                   <th className="px-4 py-3">Type</th>
-                                  <th className="px-4 py-3">Category</th>
+                                  <th className="px-4 py-3 cursor-pointer hover:bg-slate-100" onClick={() => handleSort('category')}>
+                                      <div className="flex items-center gap-1">Category <ArrowUpDown size={12}/></div>
+                                  </th>
                                   <th className="px-4 py-3">Description</th>
-                                  <th className="px-4 py-3 text-right">Amount</th>
+                                  <th className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100" onClick={() => handleSort('amount')}>
+                                      <div className="flex items-center justify-end gap-1">Amount <ArrowUpDown size={12}/></div>
+                                  </th>
                                   {canManageTransactions && <th className="px-4 py-3 text-right">Actions</th>}
                               </tr>
                           </thead>
