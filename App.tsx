@@ -64,6 +64,14 @@ const App: React.FC = () => {
     }
   };
 
+  const updateTransaction = (updatedTx: Transaction) => {
+    setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+  };
+
+  const deleteTransaction = (id: string) => {
+    setTransactions(prev => prev.filter(t => t.id !== id));
+  };
+
   const handleAddCategory = (cat: string) => {
       setCategories(prev => [...prev, cat]);
   };
@@ -179,12 +187,12 @@ const App: React.FC = () => {
                 <h1 className="text-3xl font-bold text-slate-900">
                     {currentView === View.MONTHLY ? 'Monthly Overview' : 
                      currentView === View.YEARLY ? 'Yearly Planner' : 
-                     currentView === View.SETTINGS ? 'Settings' : 'New Transaction'}
+                     currentView === View.SETTINGS ? 'Settings & Transactions' : 'New Transaction'}
                 </h1>
                 <p className="text-slate-500 mt-1">
                     {currentView === View.MONTHLY ? 'Track your actual spend against planned budget.' : 
                      currentView === View.YEARLY ? 'High-level view of annual financial performance.' : 
-                     currentView === View.SETTINGS ? 'Manage categories and application preferences.' : 'Record a new expense or budget item.'}
+                     currentView === View.SETTINGS ? 'Manage categories and review all transactions.' : 'Record a new expense or budget item.'}
                 </p>
             </div>
 
@@ -245,6 +253,8 @@ const App: React.FC = () => {
                     currentDate={selectedDate} 
                     availableCategories={categories}
                     onAddTransaction={addTransaction}
+                    onUpdateTransaction={updateTransaction}
+                    onDeleteTransaction={deleteTransaction}
                 />
             )}
             
@@ -267,8 +277,11 @@ const App: React.FC = () => {
             {currentView === View.SETTINGS && (
                 <SettingsView 
                     categories={categories}
+                    transactions={transactions}
                     onAddCategory={handleAddCategory}
                     onRemoveCategory={handleRemoveCategory}
+                    onUpdateTransaction={updateTransaction}
+                    onDeleteTransaction={deleteTransaction}
                 />
             )}
         </div>

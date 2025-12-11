@@ -6,10 +6,12 @@ import { Check, DollarSign, Calendar, Tag, FileText, Repeat, CalendarDays, Arrow
 
 interface Props {
   onAdd: (transaction: Omit<Transaction, 'id'> | Omit<Transaction, 'id'>[]) => void;
+  onUpdate?: (transaction: Omit<Transaction, 'id'>) => void;
   categories: string[];
   initialType?: TransactionType;
   initialCategory?: string;
   initialDate?: Date; 
+  initialData?: Transaction; // For Editing
   onClose?: () => void;
 }
 
@@ -18,23 +20,27 @@ const YEARS = [2023, 2024, 2025, 2026, 2027, 2028];
 
 export const ExpenseForm: React.FC<Props> = ({ 
     onAdd, 
+    onUpdate,
     categories, 
     initialType = TransactionType.ACTUAL,
     initialCategory = '',
     initialDate,
+    initialData,
     onClose 
 }) => {
-  const [type, setType] = useState<TransactionType>(initialType);
+  const isEditing = !!initialData;
+  const [type, setType] = useState<TransactionType>(initialData ? initialData.type : initialType);
   
   // Use useMemo to create a stable default date reference that doesn't change on every render
   const defaultDate = useMemo(() => new Date(), []);
   // If initialDate is provided (e.g. from MonthlyView), use it. Otherwise use the stable default.
-  const effectiveDate = initialDate || defaultDate;
+  // If editing, use the transaction date
+  const effectiveDate = initialData ? new Date(initialData.date) : (initialDate || defaultDate);
 
   // Common State
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(initialCategory || categories[0] || '');
-  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState(initialData ? initialData.amount.toString() : '');
+  const [category, setCategory] = useState(initialData ? initialData.category : (initialCategory || categories[0] || ''));
+  const [description, setDescription] = useState(initialData ? initialData.description : '');
 
   // Actual Expense State
   const [specificDate, setSpecificDate] = useState(effectiveDate.toISOString().slice(0, 10));
@@ -47,23 +53,25 @@ export const ExpenseForm: React.FC<Props> = ({
   const [rangeStart, setRangeStart] = useState<number>(0);
   const [rangeEnd, setRangeEnd] = useState<number>(11);
 
-  // Update category if props change
+  // Update category if props change and not editing
   useEffect(() => {
-    if (initialCategory) setCategory(initialCategory);
-    else if (!category && categories.length > 0) setCategory(categories[0]);
-  }, [categories, initialCategory, category]);
+    if (!isEditing) {
+        if (initialCategory) setCategory(initialCategory);
+        else if (!category && categories.length > 0) setCategory(categories[0]);
+    }
+  }, [categories, initialCategory, category, isEditing]);
 
   // Sync state when effectiveDate changes (e.g. user navigates to a new month in parent)
+  // But ONLY if not editing existing data, to avoid overwriting user inputs
   useEffect(() => {
-      setSpecificDate(effectiveDate.toISOString().slice(0, 10));
-      setPlanYear(effectiveDate.getFullYear());
-      // We purposefully do NOT reset selectedMonths here to avoid clearing user work 
-      // if the parent component re-renders for unrelated reasons.
-      // However, if the initialDate *actually* changed (navigation), we might want to default selection.
-      if (initialDate) {
-          setSelectedMonths(new Set([initialDate.getMonth()]));
+      if (!isEditing) {
+          setSpecificDate(effectiveDate.toISOString().slice(0, 10));
+          setPlanYear(effectiveDate.getFullYear());
+          if (initialDate) {
+              setSelectedMonths(new Set([initialDate.getMonth()]));
+          }
       }
-  }, [effectiveDate, initialDate]);
+  }, [effectiveDate, initialDate, isEditing]);
 
   const toggleMonth = (index: number) => {
       const newSet = new Set(selectedMonths);
@@ -105,34 +113,45 @@ export const ExpenseForm: React.FC<Props> = ({
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0) return;
 
-    if (type === TransactionType.ACTUAL) {
-        // Single Entry
-        onAdd({
+    if (isEditing && onUpdate) {
+        // Edit Mode: Update single record
+        onUpdate({
             date: specificDate,
             amount: val,
             category,
             description,
-            type: TransactionType.ACTUAL
+            type: type
         });
     } else {
-        // Bulk Entry for Planned Budget
-        if (selectedMonths.size === 0) return;
-
-        const transactions: Omit<Transaction, 'id'>[] = Array.from(selectedMonths).map((monthIndex: number) => {
-            // Create date for 1st of the month
-            const monthStr = (monthIndex + 1).toString().padStart(2, '0');
-            const dateStr = `${planYear}-${monthStr}-01`;
-            
-            return {
-                date: dateStr,
+        // Add Mode
+        if (type === TransactionType.ACTUAL) {
+            // Single Entry
+            onAdd({
+                date: specificDate,
                 amount: val,
                 category,
-                description: description || `${category} Budget - ${MONTHS[monthIndex]}`,
-                type: TransactionType.PLANNED
-            };
-        });
-        
-        onAdd(transactions);
+                description,
+                type: TransactionType.ACTUAL
+            });
+        } else {
+            // Bulk Entry for Planned Budget
+            if (selectedMonths.size === 0) return;
+
+            const transactions: Omit<Transaction, 'id'>[] = Array.from(selectedMonths).map((monthIndex: number) => {
+                const monthStr = (monthIndex + 1).toString().padStart(2, '0');
+                const dateStr = `${planYear}-${monthStr}-01`;
+                
+                return {
+                    date: dateStr,
+                    amount: val,
+                    category,
+                    description: description || `${category} Budget - ${MONTHS[monthIndex]}`,
+                    type: TransactionType.PLANNED
+                };
+            });
+            
+            onAdd(transactions);
+        }
     }
 
     // Reset or close
@@ -141,34 +160,36 @@ export const ExpenseForm: React.FC<Props> = ({
     } else {
         setAmount('');
         setDescription('');
-        // Don't alert, just clear for smoother flow
+        // Keep current settings for rapid entry
     }
   };
 
   return (
-    <Card className="max-w-2xl mx-auto shadow-lg border-indigo-100" title={type === TransactionType.PLANNED ? "Plan Budget" : "Record Expense"}>
+    <Card className="max-w-2xl mx-auto shadow-lg border-indigo-100" title={isEditing ? "Edit Transaction" : (type === TransactionType.PLANNED ? "Plan Budget" : "Record Expense")}>
       <form onSubmit={handleSubmit} className="space-y-6">
         
-        {/* Type Selection */}
+        {/* Type Selection - Locked in Edit Mode */}
         <div className="flex bg-slate-100 p-1 rounded-lg w-full md:w-fit">
             <button
                 type="button"
+                disabled={isEditing}
                 onClick={() => setType(TransactionType.ACTUAL)}
                 className={`flex-1 md:flex-none px-6 py-2.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                     type === TransactionType.ACTUAL 
                     ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' 
-                    : 'text-slate-500 hover:text-slate-700'
+                    : 'text-slate-500 hover:text-slate-700 disabled:text-slate-400'
                 }`}
             >
                 <DollarSign size={18} /> Actual Expense
             </button>
             <button
                 type="button"
+                disabled={isEditing}
                 onClick={() => setType(TransactionType.PLANNED)}
                 className={`flex-1 md:flex-none px-6 py-2.5 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                     type === TransactionType.PLANNED 
                     ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' 
-                    : 'text-slate-500 hover:text-slate-700'
+                    : 'text-slate-500 hover:text-slate-700 disabled:text-slate-400'
                 }`}
             >
                 <CalendarDays size={18} /> Planned Budget
@@ -177,10 +198,11 @@ export const ExpenseForm: React.FC<Props> = ({
 
         {/* Dynamic Date/Frequency Section */}
         <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-            {type === TransactionType.ACTUAL ? (
+            {/* If Editing OR Actual Type, show simple Date Picker */}
+            {type === TransactionType.ACTUAL || isEditing ? (
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                        <Calendar size={16} /> Date of Expense
+                        <Calendar size={16} /> Date
                     </label>
                     <input 
                         type="date" 
@@ -189,6 +211,11 @@ export const ExpenseForm: React.FC<Props> = ({
                         onChange={e => setSpecificDate(e.target.value)}
                         className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
+                    {isEditing && type === TransactionType.PLANNED && (
+                        <p className="text-xs text-amber-600 mt-1">
+                            Note: You are editing a single budget entry. To change multiple months, delete and recreate them or edit individually.
+                        </p>
+                    )}
                 </div>
             ) : (
                 <div className="space-y-5">
@@ -296,7 +323,7 @@ export const ExpenseForm: React.FC<Props> = ({
             {/* Amount */}
             <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                    <DollarSign size={16} /> Amount {type === TransactionType.PLANNED && <span className="text-slate-400 font-normal">(Per Month)</span>}
+                    <DollarSign size={16} /> Amount {type === TransactionType.PLANNED && !isEditing && <span className="text-slate-400 font-normal">(Per Month)</span>}
                 </label>
                 <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
@@ -338,7 +365,7 @@ export const ExpenseForm: React.FC<Props> = ({
         {/* Description */}
         <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                <FileText size={16} /> Description {type === TransactionType.PLANNED && <span className="text-slate-400 font-normal">(Optional)</span>}
+                <FileText size={16} /> Description {type === TransactionType.PLANNED && !isEditing && <span className="text-slate-400 font-normal">(Optional)</span>}
             </label>
             <textarea 
                 rows={2}
@@ -361,11 +388,11 @@ export const ExpenseForm: React.FC<Props> = ({
             )}
             <button 
                 type="submit"
-                disabled={!amount || (type === TransactionType.PLANNED && selectedMonths.size === 0)}
+                disabled={!amount || (!isEditing && type === TransactionType.PLANNED && selectedMonths.size === 0)}
                 className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-medium rounded-lg shadow-lg shadow-indigo-200 transition-all flex items-center gap-2"
             >
                 <Check size={18} />
-                {type === TransactionType.PLANNED ? `Save Budget` : 'Save Expense'}
+                {isEditing ? 'Update Transaction' : (type === TransactionType.PLANNED ? `Save Budget` : 'Save Expense')}
             </button>
         </div>
       </form>
