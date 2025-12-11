@@ -56,6 +56,7 @@ export const ExpenseForm: React.FC<Props> = ({
 
   // Permission Check for Budget
   const canEditBudget = currentUser.role === 'ADMIN' || currentUser.permissions.canEditBudget;
+  // If editing an existing PLANNED transaction, or trying to create one without permission
   const isRestrictedBudgetMode = type === TransactionType.PLANNED && !canEditBudget;
 
   // Clear success message on changes
@@ -222,12 +223,25 @@ export const ExpenseForm: React.FC<Props> = ({
         </div>
 
         {isRestrictedBudgetMode ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-                <Lock className="text-amber-500 mt-1" size={20} />
-                <div>
-                    <h4 className="font-bold text-amber-800 text-sm">Permission Denied</h4>
-                    <p className="text-amber-700 text-sm mt-1">You do not have permission to plan or edit Budgets. Please contact your administrator.</p>
+            <div className="space-y-4">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                    <Lock className="text-amber-500 mt-1" size={20} />
+                    <div>
+                        <h4 className="font-bold text-amber-800 text-sm">Permission Denied</h4>
+                        <p className="text-amber-700 text-sm mt-1">You do not have permission to plan or edit Budgets. Please contact your administrator.</p>
+                    </div>
                 </div>
+                {onClose && (
+                    <div className="flex justify-end">
+                         <button 
+                            type="button" 
+                            onClick={onClose}
+                            className="px-6 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+                        >
+                            Close
+                        </button>
+                    </div>
+                )}
             </div>
         ) : (
             <>

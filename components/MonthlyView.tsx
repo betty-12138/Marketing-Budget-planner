@@ -36,6 +36,12 @@ export const MonthlyView: React.FC<Props> = ({
   const canEditBudget = currentUser.role === 'ADMIN' || currentUser.permissions.canEditBudget;
   const canManageTransactions = currentUser.role === 'ADMIN' || currentUser.permissions.canManageTransactions;
 
+  // Helper to check if user can modify a specific transaction
+  const canModifyTransaction = (t: Transaction) => {
+    if (t.type === TransactionType.PLANNED) return canEditBudget;
+    return canManageTransactions;
+  };
+
   // Filter transactions for the current month
   const monthlyTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -87,6 +93,29 @@ export const MonthlyView: React.FC<Props> = ({
     setAiAnalysis({ ...result, status: 'success' });
   };
 
+  // Custom Label Renderer for Pie Chart
+  const renderCustomizedLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent, index, value } = props;
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 20;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const textAnchor = x > cx ? 'start' : 'end';
+
+    // Hide labels for very small slices to avoid clutter
+    if (percent < 0.05) return null;
+
+    return (
+      <g>
+         <path d={`M${cx + outerRadius * Math.cos(-midAngle * RADIAN)},${cy + outerRadius * Math.sin(-midAngle * RADIAN)}L${x},${y}`} stroke={COLORS[index % COLORS.length]} fill="none" opacity={0.6} />
+         <text x={x + (x > cx ? 5 : -5)} y={y} textAnchor={textAnchor} dominantBaseline="central">
+            <tspan x={x + (x > cx ? 5 : -5)} dy="-0.6em" fill="#1e293b" fontSize="11" fontWeight="bold">{`${(percent * 100).toFixed(1)}%`}</tspan>
+            <tspan x={x + (x > cx ? 5 : -5)} dy="1.4em" fill="#64748b" fontSize="10">{`¥${value.toLocaleString()}`}</tspan>
+         </text>
+      </g>
+    );
+  };
+
   return (
     <div className="space-y-6">
       
@@ -111,7 +140,7 @@ export const MonthlyView: React.FC<Props> = ({
       )}
 
       {/* Transaction Edit Modal */}
-      {editingTransaction && canManageTransactions && (
+      {editingTransaction && (
          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="w-full max-w-lg">
                 <ExpenseForm 
@@ -253,11 +282,13 @@ export const MonthlyView: React.FC<Props> = ({
                             data={categoryData.filter(c => c.actual > 0)}
                             cx="50%"
                             cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
+                            innerRadius={55}
+                            outerRadius={70}
                             paddingAngle={5}
                             dataKey="actual"
                             nameKey="category"
+                            label={renderCustomizedLabel}
+                            labelLine={false}
                         >
                             {categoryData.filter(c => c.actual > 0).map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -306,22 +337,30 @@ export const MonthlyView: React.FC<Props> = ({
                               {canManageTransactions && (
                                   <td className="px-4 py-3 text-right">
                                       <div className="flex items-center justify-end gap-2">
-                                          <button 
-                                            onClick={() => setEditingTransaction(t)}
-                                            className="p-1 text-slate-400 hover:text-indigo-600"
-                                          >
-                                              <Edit2 size={14} />
-                                          </button>
-                                          <button 
-                                            onClick={() => {
-                                                if (window.confirm('Delete this transaction?')) {
-                                                    onDeleteTransaction(t.id);
-                                                }
-                                            }}
-                                            className="p-1 text-slate-400 hover:text-rose-600"
-                                          >
-                                              <Trash2 size={14} />
-                                          </button>
+                                          {canModifyTransaction(t) ? (
+                                            <>
+                                                <button 
+                                                    onClick={() => setEditingTransaction(t)}
+                                                    className="p-1 text-slate-400 hover:text-indigo-600"
+                                                    title="Edit"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        if (window.confirm('Delete this transaction?')) {
+                                                            onDeleteTransaction(t.id);
+                                                        }
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-rose-600"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </>
+                                          ) : (
+                                              <span className="text-xs text-slate-300 italic">Locked</span>
+                                          )}
                                       </div>
                                   </td>
                               )}

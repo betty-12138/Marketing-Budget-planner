@@ -153,6 +153,12 @@ const App: React.FC = () => {
       setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
   };
 
+  const restoreData = (data: { users: User[], transactions: Transaction[], categories: string[] }) => {
+      if (data.users && Array.isArray(data.users)) setUsers(data.users);
+      if (data.transactions && Array.isArray(data.transactions)) setTransactions(data.transactions);
+      if (data.categories && Array.isArray(data.categories)) setCategories(data.categories);
+  };
+
   // Category Management
   const handleAddCategory = (cat: string) => {
       setCategories(prev => [...prev, cat]);
@@ -401,6 +407,7 @@ const App: React.FC = () => {
                     onDeleteTransaction={deleteTransaction}
                     onBulkDelete={bulkDeleteTransactions}
                     onImportTransactions={importTransactions}
+                    onRestoreData={restoreData}
                 />
             )}
         </div>
