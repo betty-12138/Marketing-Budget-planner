@@ -11,7 +11,6 @@ interface Props {
 
 export const YearlyDashboard: React.FC<Props> = ({ transactions, currentYear }) => {
   
-  // existing chart data logic
   const chartData = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => {
       const d = new Date(currentYear, i, 1);
@@ -38,7 +37,6 @@ export const YearlyDashboard: React.FC<Props> = ({ transactions, currentYear }) 
     return months;
   }, [transactions, currentYear]);
 
-  // Matrix Data Logic
   const matrixData = useMemo(() => {
       const categories = Array.from(new Set(transactions.map(t => t.category))).sort();
       const months = Array.from({ length: 12 }, (_, i) => i);
@@ -69,11 +67,11 @@ export const YearlyDashboard: React.FC<Props> = ({ transactions, currentYear }) 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-white">
           <p className="text-sm text-blue-600 font-semibold uppercase tracking-wider">Annual Budget</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">${totalBudget.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">¥{totalBudget.toLocaleString()}</p>
         </Card>
         <Card className="bg-gradient-to-br from-indigo-50 to-white">
           <p className="text-sm text-indigo-600 font-semibold uppercase tracking-wider">Total Spent (YTD)</p>
-          <p className="text-3xl font-bold text-slate-900 mt-2">${totalActual.toLocaleString()}</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">¥{totalActual.toLocaleString()}</p>
         </Card>
         <Card className="bg-gradient-to-br from-emerald-50 to-white">
           <p className="text-sm text-emerald-600 font-semibold uppercase tracking-wider">Budget Utilization</p>
@@ -97,11 +95,11 @@ export const YearlyDashboard: React.FC<Props> = ({ transactions, currentYear }) 
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b'}} tickFormatter={(value) => `$${value/1000}k`} />
+              <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b'}} tickFormatter={(value) => `¥${value/1000}k`} />
               <Tooltip 
                 cursor={{fill: '#f1f5f9'}}
                 contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                formatter={(value: number) => [`¥${value.toLocaleString()}`, '']}
               />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Bar dataKey="planned" name="Planned Budget" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={20} />

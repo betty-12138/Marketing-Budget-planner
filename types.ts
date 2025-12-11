@@ -4,6 +4,24 @@ export enum TransactionType {
   ACTUAL = 'ACTUAL'    // Expense
 }
 
+export type UserRole = 'ADMIN' | 'MEMBER';
+
+export interface Permissions {
+  canEditBudget: boolean;
+  canEditCategory: boolean;
+  canManageTransactions: boolean; // Edit/Delete existing
+  canManageUsers: boolean;
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatar?: string;
+  permissions: Permissions;
+}
+
 // Default categories for initialization
 export const DEFAULT_CATEGORIES = [
   'Advertising (Ads)',
@@ -18,10 +36,11 @@ export const DEFAULT_CATEGORIES = [
 export interface Transaction {
   id: string;
   date: string; // ISO YYYY-MM-DD
-  category: string; // Changed from enum to string to support dynamic categories
+  category: string; 
   description: string;
   amount: number;
   type: TransactionType;
+  createdBy: string; // Username/Email of creator
 }
 
 export interface MonthlySummary {

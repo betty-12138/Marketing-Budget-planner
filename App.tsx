@@ -4,29 +4,19 @@ import { YearlyDashboard } from './components/YearlyDashboard';
 import { MonthlyView } from './components/MonthlyView';
 import { ExpenseForm } from './components/ExpenseForm';
 import { SettingsView } from './components/SettingsView';
-import { Transaction, TransactionType, DEFAULT_CATEGORIES } from './types';
-import { LayoutDashboard, Calendar, PlusCircle, PieChart, Menu, X, Wallet, Settings, Download } from 'lucide-react';
+import { LoginView } from './components/LoginView';
+import { Transaction, TransactionType, DEFAULT_CATEGORIES, User } from './types';
+import { LayoutDashboard, PlusCircle, PieChart, Menu, X, Wallet, Settings, Download, LogOut, Calendar } from 'lucide-react';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-// Mock Initial Data using string literals dynamically based on current year
+// Mock Initial Data 
 const INITIAL_DATA: Transaction[] = [
-  // January - Planned
-  { id: '1', date: `${CURRENT_YEAR}-01-01`, category: 'Advertising (Ads)', description: 'Jan Ads Budget', amount: 5000, type: TransactionType.PLANNED },
-  { id: '2', date: `${CURRENT_YEAR}-01-01`, category: 'Tools & Software', description: 'Q1 Software License', amount: 1200, type: TransactionType.PLANNED },
-  { id: '3', date: `${CURRENT_YEAR}-01-01`, category: 'Content Creation', description: 'Blog Content Plan', amount: 2000, type: TransactionType.PLANNED },
-  // January - Actual
-  { id: '4', date: `${CURRENT_YEAR}-01-15`, category: 'Advertising (Ads)', description: 'Facebook Ads Jan', amount: 3200, type: TransactionType.ACTUAL },
-  { id: '5', date: `${CURRENT_YEAR}-01-20`, category: 'Tools & Software', description: 'HubSpot Monthly', amount: 800, type: TransactionType.ACTUAL },
-  // February
-  { id: '6', date: `${CURRENT_YEAR}-02-01`, category: 'Advertising (Ads)', description: 'Feb Ads Budget', amount: 5000, type: TransactionType.PLANNED },
-  { id: '7', date: `${CURRENT_YEAR}-02-10`, category: 'Advertising (Ads)', description: 'Google Ads', amount: 5500, type: TransactionType.ACTUAL }, // Overbudget
-  // October (Example future/past month data)
-  { id: '8', date: `${CURRENT_YEAR}-10-01`, category: 'Events & Conferences', description: 'Annual Conf Budget', amount: 15000, type: TransactionType.PLANNED },
-  { id: '9', date: `${CURRENT_YEAR}-10-01`, category: 'Advertising (Ads)', description: 'Q4 Push', amount: 8000, type: TransactionType.PLANNED },
-  { id: '10', date: `${CURRENT_YEAR}-10-05`, category: 'Events & Conferences', description: 'Venue Deposit', amount: 5000, type: TransactionType.ACTUAL },
-  { id: '11', date: `${CURRENT_YEAR}-10-12`, category: 'Advertising (Ads)', description: 'LinkedIn Campaign', amount: 2000, type: TransactionType.ACTUAL },
-  { id: '12', date: `${CURRENT_YEAR}-10-15`, category: 'Content Creation', description: 'Video Production', amount: 3500, type: TransactionType.ACTUAL },
+  { id: '1', date: `${CURRENT_YEAR}-01-01`, category: 'Advertising (Ads)', description: 'Jan Ads Budget', amount: 5000, type: TransactionType.PLANNED, createdBy: 'Administrator' },
+  { id: '2', date: `${CURRENT_YEAR}-01-01`, category: 'Tools & Software', description: 'Q1 Software License', amount: 1200, type: TransactionType.PLANNED, createdBy: 'Administrator' },
+  { id: '3', date: `${CURRENT_YEAR}-01-01`, category: 'Content Creation', description: 'Blog Content Plan', amount: 2000, type: TransactionType.PLANNED, createdBy: 'Administrator' },
+  { id: '4', date: `${CURRENT_YEAR}-01-15`, category: 'Advertising (Ads)', description: 'Facebook Ads Jan', amount: 3200, type: TransactionType.ACTUAL, createdBy: 'John Doe' },
+  { id: '5', date: `${CURRENT_YEAR}-01-20`, category: 'Tools & Software', description: 'HubSpot Monthly', amount: 800, type: TransactionType.ACTUAL, createdBy: 'John Doe' },
 ];
 
 enum View {
@@ -37,13 +27,47 @@ enum View {
 }
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // Mock Database of Users
+  const [users, setUsers] = useState<User[]>([
+      { id: 'admin-001', name: 'Administrator', email: 'admin@marketflow.com', role: 'ADMIN', permissions: { canEditBudget: true, canEditCategory: true, canManageTransactions: true, canManageUsers: true } },
+      { id: 'user-001', name: 'John Doe', email: 'john@example.com', role: 'MEMBER', permissions: { canEditBudget: false, canEditCategory: false, canManageTransactions: true, canManageUsers: false } },
+  ]);
+
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_DATA);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [currentView, setCurrentView] = useState<View>(View.MONTHLY);
-  const [selectedDate, setSelectedDate] = useState(new Date()); // Default to system time
+  const [selectedDate, setSelectedDate] = useState(new Date()); 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Updated to accept single or array of transactions
+  // Auth Handling
+  const handleLogin = (user: User) => {
+      // Check if user exists in our mock DB, if not add them
+      const existing = users.find(u => u.email === user.email);
+      if (!existing) {
+          setUsers(prev => [...prev, user]);
+          setCurrentUser(user);
+      } else {
+          // Use stored permissions for existing user
+          setCurrentUser(existing);
+      }
+  };
+
+  const handleLogout = () => {
+      setCurrentUser(null);
+      setCurrentView(View.MONTHLY);
+  };
+
+  // User Management
+  const updateUserPermissions = (userId: string, permissions: User['permissions']) => {
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions } : u));
+      // Update current user if it's them (unlikely for Admin to demote themselves but good practice)
+      if (currentUser?.id === userId) {
+          setCurrentUser(prev => prev ? { ...prev, permissions } : null);
+      }
+  };
+
   const addTransaction = (t: Omit<Transaction, 'id'> | Omit<Transaction, 'id'>[]) => {
     const newItems = Array.isArray(t) ? t : [t];
     const newTransactions = newItems.map(item => ({
@@ -53,15 +77,22 @@ const App: React.FC = () => {
 
     setTransactions(prev => [...prev, ...newTransactions]);
 
-    // If added from Entry view, go to Monthly view focused on the date of the first added item
-    if (currentView === View.ENTRY && newTransactions.length > 0) {
-        setCurrentView(View.MONTHLY);
-        const firstDate = new Date(newTransactions[0].date);
-        // Only update date if it's vastly different (different year/month)
-        if (firstDate.getMonth() !== selectedDate.getMonth() || firstDate.getFullYear() !== selectedDate.getFullYear()) {
-             setSelectedDate(new Date(firstDate));
-        }
+    // Removed auto-navigation to MONTHLY view to keep user on Entry page
+    // Only update selected date if needed for context
+    if (newTransactions.length > 0 && currentView !== View.ENTRY) {
+         const firstDate = new Date(newTransactions[0].date);
+         if (firstDate.getMonth() !== selectedDate.getMonth() || firstDate.getFullYear() !== selectedDate.getFullYear()) {
+              setSelectedDate(new Date(firstDate));
+         }
     }
+  };
+
+  const importTransactions = (imported: Omit<Transaction, 'id'>[]) => {
+      const newTransactions = imported.map(item => ({
+          ...item,
+          id: Math.random().toString(36).substr(2, 9)
+      }));
+      setTransactions(prev => [...prev, ...newTransactions]);
   };
 
   const updateTransaction = (updatedTx: Transaction) => {
@@ -72,8 +103,20 @@ const App: React.FC = () => {
     setTransactions(prev => prev.filter(t => t.id !== id));
   };
 
+  const bulkDeleteTransactions = (ids: string[]) => {
+      setTransactions(prev => prev.filter(t => !ids.includes(t.id)));
+  };
+
   const handleAddCategory = (cat: string) => {
       setCategories(prev => [...prev, cat]);
+  };
+
+  const handleRenameCategory = (oldName: string, newName: string) => {
+      // 1. Update Category List
+      setCategories(prev => prev.map(c => c === oldName ? newName : c));
+      
+      // 2. Update all existing transactions with that category
+      setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: newName } : t));
   };
 
   const handleRemoveCategory = (cat: string) => {
@@ -84,18 +127,18 @@ const App: React.FC = () => {
     setSelectedDate(prev => new Date(year, prev.getMonth(), 1));
   };
 
-  // Export transactions to CSV
   const exportData = () => {
-      const headers = ['Date', 'Type', 'Category', 'Description', 'Amount'];
+      const headers = ['Date', 'Type', 'Category', 'Description', 'Amount', 'CreatedBy'];
       const csvContent = [
         headers.join(','),
         ...transactions.map(t => {
           return [
             t.date,
             t.type,
-            `"${t.category.replace(/"/g, '""')}"`, // escape quotes for CSV
+            `"${t.category.replace(/"/g, '""')}"`, 
             `"${t.description.replace(/"/g, '""')}"`,
-            t.amount
+            t.amount,
+            `"${t.createdBy}"`
           ].join(',')
         })
       ].join('\n');
@@ -110,6 +153,10 @@ const App: React.FC = () => {
       document.body.removeChild(link);
   };
 
+  if (!currentUser) {
+      return <LoginView onLogin={handleLogin} />;
+  }
+
   const navItems = [
     { id: View.MONTHLY, label: 'Monthly Board', icon: LayoutDashboard },
     { id: View.YEARLY, label: 'Yearly Plan', icon: PieChart },
@@ -117,7 +164,6 @@ const App: React.FC = () => {
     { id: View.SETTINGS, label: 'Settings', icon: Settings },
   ];
 
-  // Dynamic Year List based on current system time
   const YEARS = [CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1, CURRENT_YEAR + 2, CURRENT_YEAR + 3];
 
   return (
@@ -166,15 +212,21 @@ const App: React.FC = () => {
         </nav>
 
         <div className="p-6 border-t border-slate-800">
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold">
-                    TM
+            <div className="flex items-center gap-3 mb-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${currentUser.role === 'ADMIN' ? 'bg-purple-600' : 'bg-indigo-600'}`}>
+                    {currentUser.name.charAt(0)}
                 </div>
-                <div>
-                    <p className="text-sm font-medium text-white">Team Member</p>
-                    <p className="text-xs text-slate-500">Marketing Dept</p>
+                <div className="overflow-hidden">
+                    <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
+                    <p className="text-xs text-slate-500 truncate">{currentUser.role === 'ADMIN' ? 'Administrator' : 'Team Member'}</p>
                 </div>
             </div>
+            <button 
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
+            >
+                <LogOut size={16} /> Sign Out
+            </button>
         </div>
       </aside>
 
@@ -192,13 +244,11 @@ const App: React.FC = () => {
                 <p className="text-slate-500 mt-1">
                     {currentView === View.MONTHLY ? 'Track your actual spend against planned budget.' : 
                      currentView === View.YEARLY ? 'High-level view of annual financial performance.' : 
-                     currentView === View.SETTINGS ? 'Manage categories and review all transactions.' : 'Record a new expense or budget item.'}
+                     currentView === View.SETTINGS ? 'Manage categories, users, and transactions.' : 'Record a new expense or budget item.'}
                 </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-                
-                {/* Export Button */}
                 <button 
                     onClick={exportData}
                     className="flex items-center gap-2 bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-indigo-600 px-4 py-2 rounded-lg shadow-sm transition-colors font-medium text-sm"
@@ -208,7 +258,6 @@ const App: React.FC = () => {
                     <span className="hidden sm:inline">Export Data</span>
                 </button>
 
-                {/* Global Year Switcher */}
                 {(currentView === View.MONTHLY || currentView === View.YEARLY) && (
                    <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-3 py-1.5 flex items-center gap-2">
                       <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Year</span>
@@ -249,6 +298,7 @@ const App: React.FC = () => {
         <div className="animate-fade-in">
             {currentView === View.MONTHLY && (
                 <MonthlyView 
+                    currentUser={currentUser}
                     transactions={transactions} 
                     currentDate={selectedDate} 
                     availableCategories={categories}
@@ -268,6 +318,7 @@ const App: React.FC = () => {
             {currentView === View.ENTRY && (
                 <div className="max-w-3xl mx-auto mt-8">
                     <ExpenseForm 
+                        currentUser={currentUser}
                         onAdd={addTransaction} 
                         categories={categories} 
                     />
@@ -276,12 +327,18 @@ const App: React.FC = () => {
 
             {currentView === View.SETTINGS && (
                 <SettingsView 
+                    currentUser={currentUser}
+                    users={users}
+                    onUpdateUserPermissions={updateUserPermissions}
                     categories={categories}
                     transactions={transactions}
                     onAddCategory={handleAddCategory}
+                    onRenameCategory={handleRenameCategory}
                     onRemoveCategory={handleRemoveCategory}
                     onUpdateTransaction={updateTransaction}
                     onDeleteTransaction={deleteTransaction}
+                    onBulkDelete={bulkDeleteTransactions}
+                    onImportTransactions={importTransactions}
                 />
             )}
         </div>

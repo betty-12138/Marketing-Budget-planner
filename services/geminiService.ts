@@ -21,18 +21,19 @@ export const analyzeBudget = async (
   }
 
   const prompt = `
-    You are a Senior Marketing Budget Analyst. Analyze the following budget data for ${currentMonth}.
+    You are a Senior Marketing Budget Analyst based in China. Analyze the following budget data for ${currentMonth}.
+    Currency is RMB (CNY/¥).
     
     Context:
-    - Total Budget (Planned): $${monthlyData.planned.toFixed(2)}
-    - Total Spent (Actual): $${monthlyData.actual.toFixed(2)}
-    - Variance: $${monthlyData.variance.toFixed(2)}
+    - Total Budget (Planned): ¥${monthlyData.planned.toFixed(2)}
+    - Total Spent (Actual): ¥${monthlyData.actual.toFixed(2)}
+    - Variance: ¥${monthlyData.variance.toFixed(2)}
     
     Category Breakdown (Planned vs Actual):
-    ${categoryBreakdown.map(c => `- ${c.category}: Planned $${c.planned}, Actual $${c.actual}`).join('\n')}
+    ${categoryBreakdown.map(c => `- ${c.category}: Planned ¥${c.planned}, Actual ¥${c.actual}`).join('\n')}
 
     Recent Transactions:
-    ${recentTransactions.slice(0, 5).map(t => `- ${t.description}: $${t.amount}`).join('\n')}
+    ${recentTransactions.slice(0, 5).map(t => `- ${t.description} (${t.createdBy || 'Unknown User'}): ¥${t.amount}`).join('\n')}
 
     Task:
     1. Provide a concise 2-sentence summary of the financial health.
@@ -41,7 +42,7 @@ export const analyzeBudget = async (
     Format the output as JSON:
     {
       "summary": "...",
-      "recommendations": ["...", "...", "..."]
+      "recommendations: ["...", "...", "..."]
     }
   `;
 
