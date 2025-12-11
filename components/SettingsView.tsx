@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
 import { Card } from './ui/Card';
-import { Plus, Trash2, Tag, AlertCircle, FileText, Search, Edit2, Users, Shield, CheckCircle, Upload, Save, X } from 'lucide-react';
-import { Transaction, TransactionType, User } from '../types';
+import { Plus, Trash2, Tag, AlertCircle, FileText, Search, Edit2, Users, Shield, CheckCircle, Upload, Save, X, UserPlus, Lock } from 'lucide-react';
+import { Transaction, TransactionType, User, UserRole, Permissions } from '../types';
 import { ExpenseForm } from './ExpenseForm';
 
 declare const XLSX: any; // Global definition for SheetJS
@@ -10,6 +10,7 @@ declare const XLSX: any; // Global definition for SheetJS
 interface Props {
   currentUser: User;
   users: User[];
+  onAddUser: (user: User) => void;
   onUpdateUserPermissions: (userId: string, permissions: User['permissions']) => void;
   categories: string[];
   transactions: Transaction[];
@@ -27,6 +28,7 @@ type Tab = 'CATEGORIES' | 'TRANSACTIONS' | 'USERS';
 export const SettingsView: React.FC<Props> = ({ 
     currentUser,
     users,
+    onAddUser,
     onUpdateUserPermissions,
     categories, 
     transactions, 
@@ -39,15 +41,32 @@ export const SettingsView: React.FC<Props> = ({
     onImportTransactions
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>(currentUser.role === 'ADMIN' ? 'USERS' : 'CATEGORIES');
+  
+  // Category State
   const [newCategory, setNewCategory] = useState('');
   const [renameData, setRenameData] = useState<{ oldName: string, newName: string } | null>(null);
   
+  // Transaction State
   const [searchTerm, setSearchTerm] = useState('');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<Set<string>>(new Set());
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<string>('');
+
+  // User Mgmt State
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUser, setNewUser] = useState<{name: string, username: string, password: string, role: UserRole}>({
+      name: '',
+      username: '',
+      password: '',
+      role: 'MEMBER'
+  });
+  const [newUserPermissions, setNewUserPermissions] = useState<Permissions>({
+      canEditBudget: false,
+      canEditCategory: false,
+      canManageTransactions: true,
+      canManageUsers: false
+  });
 
   // Permissions
   const canEditCategory = currentUser.role === 'ADMIN' || currentUser.permissions.canEditCategory;
@@ -80,6 +99,35 @@ export const SettingsView: React.FC<Props> = ({
           ...user.permissions,
           [key]: !user.permissions[key]
       });
+  };
+
+  const handleCreateUser = (e: React.FormEvent) => {
+      e.preventDefault();
+      if(users.some(u => u.username === newUser.username)) {
+          alert('Username already exists!');
+          return;
+      }
+
+      const finalPermissions = newUser.role === 'ADMIN' ? {
+          canEditBudget: true,
+          canEditCategory: true,
+          canManageTransactions: true,
+          canManageUsers: true
+      } : newUserPermissions;
+
+      const createdUser: User = {
+          id: `user-${Date.now()}`,
+          name: newUser.name,
+          username: newUser.username,
+          password: newUser.password,
+          email: `${newUser.username}@local.com`, // Dummy email
+          role: newUser.role,
+          permissions: finalPermissions
+      };
+
+      onAddUser(createdUser);
+      setShowAddUser(false);
+      setNewUser({ name: '', username: '', password: '', role: 'MEMBER' });
   };
 
   const toggleSelection = (id: string) => {
@@ -117,11 +165,8 @@ export const SettingsView: React.FC<Props> = ({
               const ws = wb.Sheets[wsname];
               const data = XLSX.utils.sheet_to_json(ws);
 
-              // Basic parsing logic - expects headers roughly matching: Date, Category, Amount, Description, Type
               const parsedTransactions: Omit<Transaction, 'id'>[] = [];
-              
               data.forEach((row: any) => {
-                  // Attempt to find fields regardless of case
                   const date = row['Date'] || row['date'];
                   const amount = row['Amount'] || row['amount'];
                   const category = row['Category'] || row['category'];
@@ -129,15 +174,11 @@ export const SettingsView: React.FC<Props> = ({
                   const type = (row['Type'] || row['type'] || 'ACTUAL').toUpperCase();
 
                   if (date && amount && category) {
-                      // Normalize Date (Assume Excel might give serial, but usually CSV/Json gives string if not formatted)
-                      // Simple check for now, can be expanded for robustness
                       let dateStr = date;
                       if (typeof date === 'number') {
-                          // Excel serial date to JS Date
                           const jsDate = new Date(Math.round((date - 25569)*86400*1000));
                           dateStr = jsDate.toISOString().split('T')[0];
                       }
-
                       parsedTransactions.push({
                           date: dateStr,
                           amount: Number(amount),
@@ -160,7 +201,6 @@ export const SettingsView: React.FC<Props> = ({
               console.error(err);
               setImportStatus('Error parsing file. Ensure it is a valid Excel/CSV.');
           }
-          // Reset input
           if (fileInputRef.current) fileInputRef.current.value = '';
       };
       reader.readAsBinaryString(file);
@@ -169,7 +209,7 @@ export const SettingsView: React.FC<Props> = ({
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       
-      {/* Edit Modal */}
+      {/* Edit Transaction Modal */}
       {editingTransaction && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="w-full max-w-lg">
@@ -186,6 +226,60 @@ export const SettingsView: React.FC<Props> = ({
                     onClose={() => setEditingTransaction(null)}
                 />
             </div>
+        </div>
+      )}
+
+      {/* Add User Modal */}
+      {showAddUser && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <Card title="Register New Account" className="w-full max-w-md">
+                <form onSubmit={handleCreateUser} className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Display Name</label>
+                        <input type="text" required value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} className="w-full border rounded p-2" placeholder="e.g. Marketing Lead" />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Username (Login)</label>
+                        <input type="text" required value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} className="w-full border rounded p-2" placeholder="e.g. marklead" />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Password</label>
+                        <input type="password" required value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full border rounded p-2" placeholder="******" />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Role</label>
+                        <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})} className="w-full border rounded p-2">
+                            <option value="MEMBER">Member (Restricted)</option>
+                            <option value="ADMIN">Admin (Full Access)</option>
+                        </select>
+                    </div>
+
+                    {newUser.role === 'MEMBER' && (
+                        <div className="bg-slate-50 p-3 rounded border border-slate-200">
+                            <p className="text-xs font-bold text-slate-500 mb-2">Permissions</p>
+                            <div className="space-y-2">
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input type="checkbox" checked={newUserPermissions.canEditBudget} onChange={e => setNewUserPermissions({...newUserPermissions, canEditBudget: e.target.checked})} />
+                                    Edit Budget
+                                </label>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input type="checkbox" checked={newUserPermissions.canEditCategory} onChange={e => setNewUserPermissions({...newUserPermissions, canEditCategory: e.target.checked})} />
+                                    Edit Categories
+                                </label>
+                                <label className="flex items-center gap-2 text-sm">
+                                    <input type="checkbox" checked={newUserPermissions.canManageTransactions} onChange={e => setNewUserPermissions({...newUserPermissions, canManageTransactions: e.target.checked})} />
+                                    Manage Expenses
+                                </label>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2 pt-2">
+                        <button type="button" onClick={() => setShowAddUser(false)} className="flex-1 py-2 text-slate-500 hover:bg-slate-100 rounded">Cancel</button>
+                        <button type="submit" className="flex-1 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">Create User</button>
+                    </div>
+                </form>
+            </Card>
         </div>
       )}
 
@@ -218,12 +312,23 @@ export const SettingsView: React.FC<Props> = ({
       {/* User Management Tab */}
       {activeTab === 'USERS' && canManageUsers && (
           <div className="animate-fade-in space-y-4">
-              <Card title="Active Users & Permissions">
+              <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-slate-800">Active Accounts</h3>
+                  <button 
+                      onClick={() => setShowAddUser(true)} 
+                      className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                  >
+                      <UserPlus size={18} /> Register New User
+                  </button>
+              </div>
+
+              <Card>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 text-slate-500 uppercase font-medium">
                             <tr>
                                 <th className="px-4 py-3">User</th>
+                                <th className="px-4 py-3">Username</th>
                                 <th className="px-4 py-3">Role</th>
                                 <th className="px-4 py-3 text-center">Edit Budget</th>
                                 <th className="px-4 py-3 text-center">Edit Categories</th>
@@ -235,7 +340,9 @@ export const SettingsView: React.FC<Props> = ({
                                 <tr key={u.id} className="hover:bg-slate-50">
                                     <td className="px-4 py-3">
                                         <div className="font-medium text-slate-900">{u.name}</div>
-                                        <div className="text-xs text-slate-500">{u.email}</div>
+                                    </td>
+                                    <td className="px-4 py-3 text-slate-500 font-mono text-xs">
+                                        {u.username}
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>
@@ -243,7 +350,9 @@ export const SettingsView: React.FC<Props> = ({
                                         </span>
                                     </td>
                                     {u.role === 'ADMIN' ? (
-                                        <td colSpan={3} className="px-4 py-3 text-center text-xs text-slate-400 italic">Full Access</td>
+                                        <td colSpan={3} className="px-4 py-3 text-center text-xs text-slate-400 italic">
+                                            <div className="flex items-center justify-center gap-1"><Shield size={14}/> Full Access</div>
+                                        </td>
                                     ) : (
                                         <>
                                             <td className="px-4 py-3 text-center">

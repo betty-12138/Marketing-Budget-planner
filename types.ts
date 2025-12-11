@@ -16,7 +16,9 @@ export interface Permissions {
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email: string; // Keep for display/contact
+  username: string; // For Login
+  password?: string; // For Login (In real app, this should be hashed)
   role: UserRole;
   avatar?: string;
   permissions: Permissions;

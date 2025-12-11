@@ -31,8 +31,25 @@ const App: React.FC = () => {
   
   // Mock Database of Users
   const [users, setUsers] = useState<User[]>([
-      { id: 'admin-001', name: 'Administrator', email: 'admin@marketflow.com', role: 'ADMIN', permissions: { canEditBudget: true, canEditCategory: true, canManageTransactions: true, canManageUsers: true } },
-      { id: 'user-001', name: 'John Doe', email: 'john@example.com', role: 'MEMBER', permissions: { canEditBudget: false, canEditCategory: false, canManageTransactions: true, canManageUsers: false } },
+      { 
+          id: 'admin-001', 
+          name: 'Administrator', 
+          username: 'admin',
+          password: 'admin123',
+          email: 'admin@marketflow.com', 
+          role: 'ADMIN', 
+          permissions: { canEditBudget: true, canEditCategory: true, canManageTransactions: true, canManageUsers: true } 
+      },
+      // Example Member
+      { 
+        id: 'user-001', 
+        name: 'John Doe', 
+        username: 'john',
+        password: 'password123',
+        email: 'john@marketflow.com', 
+        role: 'MEMBER', 
+        permissions: { canEditBudget: false, canEditCategory: false, canManageTransactions: true, canManageUsers: false } 
+    },
   ]);
 
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_DATA);
@@ -43,15 +60,7 @@ const App: React.FC = () => {
 
   // Auth Handling
   const handleLogin = (user: User) => {
-      // Check if user exists in our mock DB, if not add them
-      const existing = users.find(u => u.email === user.email);
-      if (!existing) {
-          setUsers(prev => [...prev, user]);
-          setCurrentUser(user);
-      } else {
-          // Use stored permissions for existing user
-          setCurrentUser(existing);
-      }
+      setCurrentUser(user);
   };
 
   const handleLogout = () => {
@@ -60,9 +69,13 @@ const App: React.FC = () => {
   };
 
   // User Management
+  const handleAddUser = (user: User) => {
+      setUsers(prev => [...prev, user]);
+  };
+
   const updateUserPermissions = (userId: string, permissions: User['permissions']) => {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, permissions } : u));
-      // Update current user if it's them (unlikely for Admin to demote themselves but good practice)
+      // Update current user if it's them
       if (currentUser?.id === userId) {
           setCurrentUser(prev => prev ? { ...prev, permissions } : null);
       }
@@ -77,8 +90,6 @@ const App: React.FC = () => {
 
     setTransactions(prev => [...prev, ...newTransactions]);
 
-    // Removed auto-navigation to MONTHLY view to keep user on Entry page
-    // Only update selected date if needed for context
     if (newTransactions.length > 0 && currentView !== View.ENTRY) {
          const firstDate = new Date(newTransactions[0].date);
          if (firstDate.getMonth() !== selectedDate.getMonth() || firstDate.getFullYear() !== selectedDate.getFullYear()) {
@@ -112,10 +123,7 @@ const App: React.FC = () => {
   };
 
   const handleRenameCategory = (oldName: string, newName: string) => {
-      // 1. Update Category List
       setCategories(prev => prev.map(c => c === oldName ? newName : c));
-      
-      // 2. Update all existing transactions with that category
       setTransactions(prev => prev.map(t => t.category === oldName ? { ...t, category: newName } : t));
   };
 
@@ -154,7 +162,7 @@ const App: React.FC = () => {
   };
 
   if (!currentUser) {
-      return <LoginView onLogin={handleLogin} />;
+      return <LoginView users={users} onLogin={handleLogin} />;
   }
 
   const navItems = [
@@ -329,6 +337,7 @@ const App: React.FC = () => {
                 <SettingsView 
                     currentUser={currentUser}
                     users={users}
+                    onAddUser={handleAddUser}
                     onUpdateUserPermissions={updateUserPermissions}
                     categories={categories}
                     transactions={transactions}
